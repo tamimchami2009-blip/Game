@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Shape Shifter Escape</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --bg2: #12161f;
+    --accent-shield: #9b8cff;
+    --accent-slow: #57c7ff;
+    --accent-coin: #ffd76b;
+    --text: #e8e6e1;
+    --muted: #6b7280;
+    --danger: #ef5b5b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    touch-action: none;
+  }
+  #wrap { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #gameCanvas { background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%); display: block; touch-action: none; max-width: 100%; max-height: 100%; }
+
+  #hud { position: absolute; top: 16px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 20px; color: var(--text); font-variant-numeric: tabular-nums; pointer-events: none; z-index: 10; }
+  #score { font-size: 28px; font-weight: 700; letter-spacing: 0.5px; transition: transform 0.1s ease; }
+  #score.bump { transform: scale(1.25); }
+  #best { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  #comboWrap { font-size: 13px; color: var(--accent-coin); margin-top: 2px; height: 16px; opacity: 0; transition: opacity 0.15s ease; font-weight: 600; }
+  #comboWrap.show { opacity: 1; }
+  #rightHud { text-align: right; }
+  #speedTag { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  #coinTag { font-size: 15px; color: var(--accent-coin); margin-top: 6px; font-weight: 700; }
+  #shieldTag { font-size: 12px; color: var(--accent-shield); margin-top: 4px; height: 15px; opacity: 0; transition: opacity 0.15s ease; }
+  #shieldTag.show { opacity: 1; }
+
+  #missionBar {
+    position: absolute; top: 74px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px; padding: 6px 16px; font-size: 12px; color: var(--text);
+    z-index: 10; opacity: 0; transition: opacity 0.3s ease, transform 0.2s ease;
+    white-space: nowrap; pointer-events: none;
+  }
+  #missionBar.show { opacity: 1; }
+  #missionBar.done { color: var(--accent-coin); transform: translateX(-50%) scale(1.08); }
+  #missionBar b { color: var(--accent-coin); }
+
+  #popupText {
+    position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 22px; font-weight: 800; color: var(--accent-coin);
+    z-index: 12; opacity: 0; pointer-events: none; text-shadow: 0 0 12px rgba(0,0,0,0.6);
+    transition: opacity 0.2s ease, transform 0.4s ease;
+  }
+  #popupText.show { opacity: 1; transform: translate(-50%, -70%); }
+
+  #nearRecordTag {
+    position: absolute; bottom: 106px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: var(--danger); font-weight: 700; letter-spacing: 0.5px;
+    opacity: 0; transition: opacity 0.2s ease; z-index: 10; pointer-events: none;
+  }
+  #nearRecordTag.show { opacity: 1; }
+
+  #bigBanner {
+    position: absolute; top: 30%; left: 50%;
+    transform: translate(-50%, -40%) scale(0.85);
+    opacity: 0;
+    z-index: 18; pointer-events: none; text-align: center;
+    transition: opacity 0.35s ease, transform 0.45s cubic-bezier(.2,1.4,.4,1);
+    background: linear-gradient(180deg, rgba(20,22,32,0.85), rgba(14,16,24,0.7));
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--banner-color, rgba(255,255,255,0.2));
+    border-radius: 20px;
+    padding: 18px 34px;
+    box-shadow: 0 0 40px var(--banner-glow, rgba(255,255,255,0.15)), 0 10px 30px rgba(0,0,0,0.4);
+  }
+  #bigBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #bigBannerIcon { font-size: 40px; margin-bottom: 4px; filter: drop-shadow(0 0 12px var(--banner-glow, transparent)); }
+  #bigBannerTitle { font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: 0.5px; }
+  #bigBannerSub { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 3px; }
+  #bigBannerDetail { font-size: 12px; color: var(--text); margin-top: 8px; max-width: 220px; line-height: 1.4; opacity: 0.9; }
+
+  #controls { position: absolute; bottom: 22px; left: 0; right: 0; display: flex; justify-content: center; gap: 14px; z-index: 10; }
+  .shapeBtn { width: 64px; height: 64px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease; }
+  .shapeBtn:active { transform: scale(0.9); }
+  .shapeBtn.active-circle { background: rgba(79,209,197,0.15); }
+  .shapeBtn.active-square { background: rgba(240,180,41,0.15); }
+  .shapeBtn.active-triangle { background: rgba(239,91,91,0.15); }
+  .shapeBtn.active-diamond { background: rgba(192,132,252,0.15); }
+  .shapeBtn.incoming { animation: pulseIncoming 0.9s ease-in-out infinite; }
+  @keyframes pulseIncoming {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(192,132,252,0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(192,132,252,0); }
+  }
+
+  #overlay { position: absolute; inset: 0; background: rgba(11,14,20,0.96); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; text-align: center; padding: 20px; overflow-y: auto; }
+  #overlay h1 { font-size: 30px; color: var(--text); margin: 0 0 6px; letter-spacing: -0.5px; }
+  #overlay .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; max-width: 280px; line-height: 1.5; }
+  #overlay .statline { color: var(--text); font-size: 15px; margin-bottom: 4px; }
+  #overlay .statline b { color: var(--accent-coin); }
+  #legend { display: flex; gap: 16px; margin-bottom: 18px; font-size: 10px; color: var(--muted); flex-wrap: wrap; justify-content: center; max-width: 300px; }
+  #legend div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+  .menuBtnRow { display: flex; gap: 10px; margin-top: 6px; }
+  .primaryBtn { padding: 14px 34px; border-radius: 30px; border: none; background: var(--accent-coin); color: #14100c; font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
+  .primaryBtn:active { transform: scale(0.96); }
+  .secondaryBtn { padding: 14px 26px; border-radius: 30px; border: 2px solid rgba(255,255,255,0.15); background: transparent; color: var(--text); font-size: 15px; font-weight: 600; }
+  .secondaryBtn:active { transform: scale(0.96); }
+  .menuLinkBtn { margin-top: 14px; background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 10px; text-decoration: underline; text-underline-offset: 3px; }
+  .menuLinkBtn:active { opacity: 0.55; }
+
+  #homeCoinTag { font-size: 15px; color: var(--accent-coin); font-weight: 700; margin-bottom: 18px; }
+
+  #modeToggle { display: flex; gap: 10px; margin-bottom: 8px; width: 100%; max-width: 300px; }
+  .modeCard { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 8px 12px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease; }
+  .modeCard:active { transform: scale(0.96); }
+  .modeCard.active { border-color: var(--accent-coin); background: rgba(255,215,107,0.08); box-shadow: 0 0 16px rgba(255,215,107,0.12); }
+  .modePreview { width: 100%; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .biomesPreview { background: linear-gradient(90deg, #12161f 0%, #1f5c3f 14%, #2b1c0a 30%, #7a5a24 42%, #0e2634 56%, #3c7a94 68%, #2a0a0a 82%, #a8451f 94%, #0c0a1f 100%); background-size: 240% 100%; animation: biomeShift 7s ease-in-out infinite alternate; }
+  @keyframes biomeShift { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+  .modeIcons { font-size: 13px; letter-spacing: 3px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7)); }
+  .classicPreview { background: linear-gradient(180deg, #0b0e14, #12161f); border: 1px dashed rgba(255,255,255,0.14); }
+  .modeCard.active .classicPreview { border-color: rgba(255,215,107,0.3); }
+  .modeName { font-size: 12px; font-weight: 700; color: var(--text); }
+  .modeTag { font-size: 9.5px; color: var(--muted); text-align: center; line-height: 1.3; }
+  #modeDesc { font-size: 11px; color: var(--muted); max-width: 270px; line-height: 1.4; margin-bottom: 16px; min-height: 30px; }
+
+  #shopGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 320px; margin-bottom: 18px; }
+  .skinCard { border: 2px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 12px 8px; background: rgba(255,255,255,0.03); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .skinCard.owned { border-color: rgba(255,255,255,0.2); }
+  .skinCard.equipped { border-color: var(--accent-coin); background: rgba(255,215,107,0.08); }
+  .skinCard .skinName { font-size: 12px; color: var(--text); font-weight: 600; }
+  .skinCard .skinPrice { font-size: 11px; color: var(--accent-coin); }
+  .skinCard button { margin-top: 4px; padding: 6px 14px; border-radius: 14px; border: none; font-size: 11px; font-weight: 700; background: var(--accent-coin); color: #14100c; }
+  .skinCard button.equippedBtn { background: rgba(255,255,255,0.12); color: var(--muted); }
+  .skinCard button.lockedBtn { background: rgba(255,255,255,0.08); color: var(--muted); }
+  .skinPreview { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+
+  #achToast {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%) translateY(-60px);
+    background: #1b1f2a; border: 1px solid rgba(255,215,107,0.4); border-radius: 12px;
+    padding: 10px 18px; font-size: 12px; color: var(--text); z-index: 30;
+    display: flex; align-items: center; gap: 8px; transition: transform 0.35s ease;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  }
+  #achToast.show { transform: translateX(-50%) translateY(0); }
+  #achToast b { color: var(--accent-coin); }
+
+  #muteBtn { position: absolute; top: 16px; right: 20px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--muted); font-size: 15px; z-index: 25; display: none; }
+  .hidden { display: none !important; }
+  #flash { position: absolute; inset: 0; background: var(--danger); opacity: 0; pointer-events: none; z-index: 15; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gameCanvas"></canvas>
+  <div id="flash"></div>
+  <div id="achToast"></div>
+  <button id="muteBtn">🔊</button>
+
+  <div id="hud">
+    <div>
+      <div id="score">0</div>
+      <div id="best">Record: 0</div>
+      <div id="comboWrap">Combo x1</div>
+    </div>
+    <div id="rightHud">
+      <div id="speedTag">Vitesse x1.0</div>
+      <div id="biomeTag" style="font-size:11px;color:var(--muted);margin-top:2px;">🌿 Prairie</div>
+      <div id="coinTag">🪙 0</div>
+      <div id="shieldTag">🛡 Bouclier actif</div>
+    </div>
+  </div>
+
+  <div id="missionBar">Mission</div>
+  <div id="popupText"></div>
+  <div id="bigBanner"><div id="bigBannerIcon"></div><div id="bigBannerTitle"></div><div id="bigBannerSub"></div><div id="bigBannerDetail"></div></div>
+  <div id="nearRecordTag">⚡ PRESQUE TON RECORD !</div>
+
+  <div id="controls">
+    <button class="shapeBtn" data-shape="circle" id="btnCircle"><svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="none" stroke-width="3" id="svgCircle"/></svg></button>
+    <button class="shapeBtn" data-shape="square" id="btnSquare"><svg width="30" height="30" viewBox="0 0 30 30"><rect x="4" y="4" width="22" height="22" fill="none" stroke-width="3" id="svgSquare"/></svg></button>
+    <button class="shapeBtn" data-shape="triangle" id="btnTriangle"><svg width="30" height="30" viewBox="0 0 30 30"><polygon points="15,3 27,26 3,26" fill="none" stroke-width="3" id="svgTriangle"/></svg></button>
+    <button class="shapeBtn hidden" data-shape="diamond" id="btnDiamond"><svg width="30" height="30" viewBox="0 0 30 30"><polygon points="15,2 28,15 15,28 2,15" fill="none" stroke-width="3" id="svgDiamond"/></svg></button>
+  </div>
+
+  <div id="overlay">
+    <!-- HOME VIEW -->
+    <div id="homeView">
+      <h1>Shape Shifter Escape</h1>
+      <div class="sub">Change de forme pour passer à travers le bon trou. Enchaîne les passages pour monter ton combo.</div>
+      <div id="homeCoinTag">🪙 0</div>
+      <div id="modeToggle">
+        <button class="modeCard active" id="modeBiomesBtn" type="button">
+          <div class="modePreview biomesPreview"><span class="modeIcons">🌿🏜️❄️🌋🌌</span></div>
+          <div class="modeName">🌍 Biomes</div>
+          <div class="modeTag">Décors et règles évolutifs</div>
+        </button>
+        <button class="modeCard" id="modeClassicBtn" type="button">
+          <div class="modePreview classicPreview">
+            <svg width="56" height="20" viewBox="0 0 56 20">
+              <circle cx="9" cy="10" r="7" fill="none" stroke="#e8e6e1" stroke-width="2"/>
+              <rect x="20" y="3" width="14" height="14" fill="none" stroke="#e8e6e1" stroke-width="2"/>
+              <polygon points="46,3 53,17 39,17" fill="none" stroke="#e8e6e1" stroke-width="2"/>
+            </svg>
+          </div>
+          <div class="modeName">⚪ Classique</div>
+          <div class="modeTag">Jeu de base, sans biome</div>
+        </button>
+      </div>
+      <div id="modeDesc"></div>
+      <div id="legend">
+        <div><span>🛡</span>Bouclier</div>
+        <div><span>⚡</span>Ralenti 3s</div>
+        <div><span>🧲</span>Aimant 5s</div>
+        <div><span>x2</span>Score doublé</div>
+        <div><span>🪙</span>Pièce</div>
+        <div><span>🎯</span>Mission</div>
+      </div>
+      <div class="menuBtnRow">
+        <button class="primaryBtn" id="playBtn">Jouer</button>
+        <button class="secondaryBtn" id="shopBtnHome">Boutique</button>
+      </div>
+    </div>
+
+    <!-- SHOP VIEW -->
+    <div id="shopView" class="hidden">
+      <h1>Boutique</h1>
+      <div id="shopCoinTag" class="sub">🪙 0 disponibles</div>
+      <div id="shopGrid"></div>
+      <button class="secondaryBtn" id="shopBackBtn">Retour</button>
+    </div>
+
+    <!-- GAME OVER VIEW -->
+    <div id="overView" class="hidden">
+      <h1>Perdu !</h1>
+      <div id="rankBadge" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:12px 18px;margin-bottom:16px;min-width:240px;"></div>
+      <div class="sub">Mauvaise forme au mauvais moment.</div>
+      <div id="statsBlock">
+        <div class="statline">Score : <b id="finalScore">0</b></div>
+        <div class="statline">Meilleur combo : <b id="finalCombo">x1</b></div>
+        <div class="statline">Pièces gagnées : <b id="finalCoinsGained">0</b></div>
+        <div class="statline">Record : <b id="finalBest">0</b></div>
+      </div>
+      <div class="menuBtnRow">
+        <button class="primaryBtn" id="retryBtn">Rejouer</button>
+        <button class="secondaryBtn" id="shopBtnOver">Boutique</button>
+      </div>
+      <button class="menuLinkBtn" id="homeBtnOver" type="button">🏠 Menu principal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const homeView = document.getElementById('homeView');
+  const shopView = document.getElementById('shopView');
+  const overView = document.getElementById('overView');
+  const homeCoinTag = document.getElementById('homeCoinTag');
+  const shopCoinTag = document.getElementById('shopCoinTag');
+  const shopGrid = document.getElementById('shopGrid');
+  const finalScoreEl = document.getElementById('finalScore');
+  const rankBadgeEl = document.getElementById('rankBadge');
+  const finalComboEl = document.getElementById('finalCombo');
+  const finalCoinsGainedEl = document.getElementById('finalCoinsGained');
+  const finalBestEl = document.getElementById('finalBest');
+  const playBtn = document.getElementById('playBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  const shopBtnHome = document.getElementById('shopBtnHome');
+  const shopBtnOver = document.getElementById('shopBtnOver');
+  const homeBtnOver = document.getElementById('homeBtnOver');
+  const shopBackBtn = document.getElementById('shopBackBtn');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const comboWrap = document.getElementById('comboWrap');
+  const speedTagEl = document.getElementById('speedTag');
+  const coinTagEl = document.getElementById('coinTag');
+  const shieldTagEl = document.getElementById('shieldTag');
+  const missionBar = document.getElementById('missionBar');
+  const popupText = document.getElementById('popupText');
+  const nearRecordTag = document.getElementById('nearRecordTag');
+  const bigBanner = document.getElementById('bigBanner');
+  const bigBannerIcon = document.getElementById('bigBannerIcon');
+  const bigBannerTitle = document.getElementById('bigBannerTitle');
+  const bigBannerSub = document.getElementById('bigBannerSub');
+  const bigBannerDetail = document.getElementById('bigBannerDetail');
+  let bigBannerTimer = null;
+  function showBigBanner(icon, title, sub, color, detail) {
+    bigBannerIcon.textContent = icon;
+    bigBannerTitle.textContent = title;
+    bigBannerSub.textContent = sub;
+    bigBannerDetail.textContent = detail || '';
+    bigBannerDetail.style.display = detail ? 'block' : 'none';
+    bigBanner.style.setProperty('--banner-color', color + '55');
+    bigBanner.style.setProperty('--banner-glow', color + '66');
+    bigBanner.classList.add('show');
+    clearTimeout(bigBannerTimer);
+    bigBannerTimer = setTimeout(() => bigBanner.classList.remove('show'), detail ? 3600 : 1900);
+  }
+  const achToast = document.getElementById('achToast');
+  const flashEl = document.getElementById('flash');
+  const muteBtn = document.getElementById('muteBtn');
+  const btnCircle = document.getElementById('btnCircle');
+  const btnSquare = document.getElementById('btnSquare');
+  const btnTriangle = document.getElementById('btnTriangle');
+  const btnDiamond = document.getElementById('btnDiamond');
+  const modeBiomesBtn = document.getElementById('modeBiomesBtn');
+  const modeClassicBtn = document.getElementById('modeClassicBtn');
+  const modeDescEl = document.getElementById('modeDesc');
+
+  // ---------- Mode de jeu : avec biomes ou jeu de base ----------
+  let gameMode = 'biomes';
+  const MODE_DESC = {
+    biomes: "Le décor évolue avec ton score et chaque biome apporte une nouvelle règle (tempête de sable, sol glissant, portes jumelles, apesanteur...).",
+    classic: "Jeu de base, sans biome ni règle spéciale : juste les formes, les portes, et la vitesse qui augmente."
+  };
+  function setGameMode(mode) {
+    gameMode = mode;
+    modeBiomesBtn.classList.toggle('active', mode === 'biomes');
+    modeClassicBtn.classList.toggle('active', mode === 'classic');
+    modeDescEl.textContent = MODE_DESC[mode];
+    biomeTagEl.style.display = mode === 'classic' ? 'none' : '';
+  }
+  modeBiomesBtn.addEventListener('click', () => setGameMode('biomes'));
+  modeClassicBtn.addEventListener('click', () => setGameMode('classic'));
+
+  // ---------- Audio ----------
+  let audioCtx = null;
+  let muted = false;
+  function ensureAudio() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} } }
+  function beep(freq, dur, type, vol) {
+    if (muted || !audioCtx) return;
+    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = type || 'sine'; osc.frequency.value = freq; gain.gain.value = vol || 0.08;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  }
+  function sfxPass() { beep(520, 0.12, 'triangle', 0.07); }
+  function sfxCoin() { beep(880, 0.1, 'sine', 0.06); }
+  function sfxPower() { beep(660, 0.18, 'sawtooth', 0.05); }
+  function sfxFail() { beep(120, 0.35, 'sawtooth', 0.09); }
+  function sfxCombo() { beep(1040, 0.08, 'square', 0.05); }
+  function sfxMission() { beep(1200, 0.1, 'sine', 0.06); setTimeout(() => beep(1600, 0.12, 'sine', 0.06), 90); }
+  function sfxBuy() { beep(700, 0.08, 'square', 0.05); setTimeout(() => beep(1000, 0.1, 'square', 0.05), 70); }
+  function vibrate(pattern) { if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch(e) {} } }
+  muteBtn.addEventListener('click', () => { muted = !muted; muteBtn.textContent = muted ? '🔇' : '🔊'; });
+
+  // ---------- Persistent (session) progression ----------
+  let totalCoins = 0;
+  let ownedSkins = new Set(['classic']);
+  let equippedSkin = 'classic';
+  let unlockedAchievements = new Set();
+
+  const SKINS = [
+    { id: 'classic', name: 'Classique', price: 0, colors: { circle:'#4fd1c5', square:'#f0b429', triangle:'#ef5b5b', diamond:'#c084fc' }, trail: '#ffffff' },
+    { id: 'neon', name: 'Néon', price: 60, colors: { circle:'#00fff2', square:'#ff2bd6', triangle:'#2bff6b', diamond:'#faff00' }, trail: '#00fff2' },
+    { id: 'lava', name: 'Lave', price: 120, colors: { circle:'#ff9a3c', square:'#ff5e3a', triangle:'#c81e1e', diamond:'#ffd23c' }, trail: '#ff5e3a' },
+    { id: 'gold', name: 'Or', price: 200, colors: { circle:'#ffe27a', square:'#ffd76b', triangle:'#e6b400', diamond:'#fff4c2' }, trail: '#ffd76b' },
+    { id: 'void', name: 'Vide', price: 320, colors: { circle:'#8a6bff', square:'#5c3fbf', triangle:'#2e1a63', diamond:'#c9b8ff' }, trail: '#8a6bff' },
+    { id: 'rainbow', name: 'Arc-en-ciel', price: 500, colors: 'rainbow', trail: 'rainbow' }
+  ];
+
+  const svgCircle = document.getElementById('svgCircle');
+  const svgSquare = document.getElementById('svgSquare');
+  const svgTriangle = document.getElementById('svgTriangle');
+  function updateButtonSVGColors() {
+    svgCircle.setAttribute('stroke', skinColor('circle'));
+    svgSquare.setAttribute('stroke', skinColor('square'));
+    svgTriangle.setAttribute('stroke', skinColor('triangle'));
+    document.getElementById('svgDiamond').setAttribute('stroke', skinColor('diamond'));
+  }
+
+  function currentSkin() { return SKINS.find(s => s.id === equippedSkin) || SKINS[0]; }
+  let rainbowHue = 0;
+  function skinColor(shape) {
+    const sk = currentSkin();
+    if (sk.colors === 'rainbow') {
+      return `hsl(${(rainbowHue + (shape==='circle'?0:shape==='square'?90:shape==='triangle'?180:270)) % 360}, 85%, 62%)`;
+    }
+    return sk.colors[shape];
+  }
+  function skinTrailColor() {
+    const sk = currentSkin();
+    if (sk.trail === 'rainbow') return `hsl(${rainbowHue}, 85%, 62%)`;
+    return sk.trail;
+  }
+
+  // ---------- Achievements ----------
+  const ACHIEVEMENTS = [
+    { id: 'first10', desc: 'Score de 10 atteint', check: s => s.score >= 10 },
+    { id: 'combo5', desc: 'Combo x5 atteint', check: s => s.combo >= 5 },
+    { id: 'combo10', desc: 'Combo x10 atteint', check: s => s.combo >= 10 },
+    { id: 'coins50', desc: '50 pièces totales', check: s => totalCoins >= 50 },
+    { id: 'score30', desc: 'Score de 30 atteint', check: s => s.score >= 30 }
+  ];
+  function checkAchievements() {
+    ACHIEVEMENTS.forEach(a => {
+      if (!unlockedAchievements.has(a.id) && a.check({ score, combo })) {
+        unlockedAchievements.add(a.id);
+        showAchToast(a.desc);
+      }
+    });
+  }
+  let achToastTimer = null;
+  function showAchToast(desc) {
+    achToast.innerHTML = '🏆 <b>Succès</b> — ' + desc;
+    achToast.classList.add('show');
+    sfxMission();
+    clearTimeout(achToastTimer);
+    achToastTimer = setTimeout(() => achToast.classList.remove('show'), 2200);
+  }
+
+  // ---------- Missions ----------
+  const MISSION_POOL = [
+    { id: 'coins3', desc: n => 'Récolte 3 pièces (' + n + '/3)', target: 3, type: 'coins', reward: 5 },
+    { id: 'combo5', desc: n => 'Atteins un combo x5', target: 5, type: 'combo', reward: 8 },
+    { id: 'survive20', desc: n => 'Survis 20 secondes', target: 20000, type: 'time', reward: 6 },
+    { id: 'pass15', desc: n => 'Passe 15 murs (' + n + '/15)', target: 15, type: 'passes', reward: 6 }
+  ];
+  let currentMission = null;
+  let missionProgress = 0;
+  let missionDone = false;
+
+  function pickMission() {
+    currentMission = MISSION_POOL[Math.floor(Math.random() * MISSION_POOL.length)];
+    missionProgress = 0;
+    missionDone = false;
+    updateMissionBar();
+  }
+  function updateMissionBar() {
+    if (!currentMission) { missionBar.classList.remove('show'); return; }
+    missionBar.classList.add('show');
+    missionBar.classList.toggle('done', missionDone);
+    const label = currentMission.type === 'combo' ? 'Atteins un combo x' + currentMission.target
+      : currentMission.type === 'time' ? 'Survis ' + (currentMission.target/1000) + 's'
+      : currentMission.desc(missionProgress);
+    missionBar.innerHTML = '🎯 ' + label + (missionDone ? ' — +' + currentMission.reward + '🪙 ✓' : '');
+  }
+  function progressMission(type, valueOrDelta) {
+    if (!currentMission || missionDone || currentMission.type !== type) return;
+    if (type === 'combo' || type === 'time') {
+      missionProgress = valueOrDelta;
+    } else {
+      missionProgress += valueOrDelta;
+    }
+    if (missionProgress >= currentMission.target) {
+      missionDone = true;
+      totalCoins += currentMission.reward;
+      showPopup('+' + currentMission.reward + '🪙 Mission !');
+      sfxMission();
+    }
+    updateMissionBar();
+  }
+
+  let popupTimer = null;
+  function showPopup(text) {
+    popupText.textContent = text;
+    popupText.classList.add('show');
+    clearTimeout(popupTimer);
+    popupTimer = setTimeout(() => popupText.classList.remove('show'), 700);
+  }
+
+  // ---------- Shop rendering ----------
+  function renderShop() {
+    shopCoinTag.textContent = '🪙 ' + totalCoins + ' disponibles';
+    shopGrid.innerHTML = '';
+    SKINS.forEach(sk => {
+      const owned = ownedSkins.has(sk.id);
+      const equipped = equippedSkin === sk.id;
+      const card = document.createElement('div');
+      card.className = 'skinCard' + (owned ? ' owned' : '') + (equipped ? ' equipped' : '');
+
+      const preview = document.createElement('div');
+      preview.className = 'skinPreview';
+      const c1 = sk.colors === 'rainbow' ? '#ff5e5e' : sk.colors.circle;
+      preview.innerHTML = `<svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="13" fill="${c1}" opacity="0.9"/></svg>`;
+      card.appendChild(preview);
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'skinName';
+      nameEl.textContent = sk.name;
+      card.appendChild(nameEl);
+
+      if (!owned) {
+        const priceEl = document.createElement('div');
+        priceEl.className = 'skinPrice';
+        priceEl.textContent = '🪙 ' + sk.price;
+        card.appendChild(priceEl);
+      }
+
+      const btn = document.createElement('button');
+      if (equipped) {
+        btn.textContent = 'Équipé';
+        btn.className = 'equippedBtn';
+        btn.disabled = true;
+      } else if (owned) {
+        btn.textContent = 'Équiper';
+        btn.onclick = () => { equippedSkin = sk.id; updateButtonSVGColors(); renderShop(); };
+      } else {
+        btn.textContent = 'Acheter';
+        if (totalCoins < sk.price) {
+          btn.className = 'lockedBtn';
+        }
+        btn.onclick = () => {
+          if (totalCoins >= sk.price) {
+            totalCoins -= sk.price;
+            ownedSkins.add(sk.id);
+            equippedSkin = sk.id;
+            sfxBuy();
+            updateButtonSVGColors();
+            renderShop();
+          }
+        };
+      }
+      card.appendChild(btn);
+      shopGrid.appendChild(card);
+    });
+  }
+
+  function showView(view) {
+    homeView.classList.add('hidden');
+    shopView.classList.add('hidden');
+    overView.classList.add('hidden');
+    overlay.classList.remove('hidden');
+    if (view === 'home') { homeView.classList.remove('hidden'); homeCoinTag.textContent = '🪙 ' + totalCoins; }
+    if (view === 'shop') { shopView.classList.remove('hidden'); renderShop(); }
+    if (view === 'over') { overView.classList.remove('hidden'); }
+  }
+
+  shopBtnHome.addEventListener('click', () => showView('shop'));
+  shopBtnOver.addEventListener('click', () => showView('shop'));
+  homeBtnOver.addEventListener('click', () => showView('home'));
+  shopBackBtn.addEventListener('click', () => showView(gameStarted === false && everPlayed ? 'over' : 'home'));
+
+  // ---------- Canvas sizing ----------
+  let W, H, DPR;
+  function resize() {
+    const maxW = Math.min(window.innerWidth, 480);
+    const maxH = window.innerHeight;
+    W = maxW; H = maxH; DPR = window.devicePixelRatio || 1;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const BASE_SHAPES = ['circle', 'square', 'triangle'];
+  const DIAMOND_UNLOCK_SCORE = 90;
+  const DIAMOND_WARNING_MS = 4200;
+  let diamondUnlocked = false;
+  let diamondGraceT = 0;
+  let diamondGraceNotified = true;
+  function activeShapes() { return diamondUnlocked ? [...BASE_SHAPES, 'diamond'] : BASE_SHAPES; }
+  // Formes réellement exigées dans les portes : le losange n'y apparaît qu'après le délai d'alerte
+  function wallShapes() { return (diamondUnlocked && diamondGraceT <= 0) ? [...BASE_SHAPES, 'diamond'] : BASE_SHAPES; }
+
+  // ---------- Biomes ----------
+  const BIOMES = [
+    { id: 'prairie', name: 'Prairie', minScore: 0, bg1: '#0b0e14', bg2: '#12161f', wallTint: 'rgba(255,255,255,0.08)', ambient: '#8fffb0', ambientKind: 'firefly' },
+    { id: 'desert', name: 'Désert', minScore: 28, bg1: '#1a1206', bg2: '#2b1c0a', wallTint: 'rgba(255,200,120,0.12)', ambient: '#e8c07a', ambientKind: 'dust' },
+    { id: 'glacier', name: 'Glacier', minScore: 60, bg1: '#071620', bg2: '#0e2634', wallTint: 'rgba(150,220,255,0.14)', ambient: '#cdeeff', ambientKind: 'snow' },
+    { id: 'volcan', name: 'Volcan', minScore: 105, bg1: '#1a0505', bg2: '#2a0a0a', wallTint: 'rgba(255,110,60,0.14)', ambient: '#ff7a3c', ambientKind: 'ember' },
+    { id: 'espace', name: 'Espace', minScore: 160, bg1: '#05050f', bg2: '#0c0a1f', wallTint: 'rgba(180,140,255,0.14)', ambient: '#c9b8ff', ambientKind: 'star' }
+  ];
+  const BIOME_ICON = { prairie: '🌿', desert: '🏜️', glacier: '❄️', volcan: '🌋', espace: '🌌' };
+  const BIOME_MECHANIC = {
+    prairie: 'Biome de départ',
+    desert: 'Tempêtes de sable',
+    glacier: 'Sol glissant',
+    volcan: 'Portes jumelles',
+    espace: 'Apesanteur'
+  };
+  const BIOME_DETAIL = {
+    prairie: "Biome d'entraînement, aucune règle spéciale. Choisis la bonne forme avant chaque porte !",
+    desert: "🌪 Une tempête de sable masque parfois la forme des portes au loin. Elle ne redevient visible qu'au dernier moment : reste prêt à réagir vite !",
+    glacier: "🧊 Le sol est glissant : changer de forme prend un court instant avant de s'appliquer. Anticipe tes changements un peu plus tôt !",
+    volcan: "🌋 Des portes jumelles rapprochées peuvent apparaître. Prépare-toi à enchaîner deux changements de forme rapidement !",
+    espace: "🌌 En apesanteur, les boutons de formes changent de place régulièrement. Regarde bien avant d'appuyer !"
+  };
+  let biomeExplained = new Set();
+  const biomeTagEl = document.getElementById('biomeTag');
+
+  // ---------- Rangs de fin de partie (façon rapport de test de réflexes) ----------
+  const RANKS = [
+    { min: 0,   ms: 480, pct: 5,    label: 'Réflexes ralentis' },
+    { min: 6,   ms: 420, pct: 15,   label: 'Sous la moyenne' },
+    { min: 12,  ms: 370, pct: 30,   label: 'Légèrement sous la moyenne' },
+    { min: 20,  ms: 320, pct: 50,   label: 'Dans la moyenne humaine' },
+    { min: 30,  ms: 280, pct: 65,   label: 'Au-dessus de la moyenne' },
+    { min: 42,  ms: 250, pct: 75,   label: 'Bons réflexes' },
+    { min: 56,  ms: 220, pct: 85,   label: 'Très bons réflexes' },
+    { min: 72,  ms: 195, pct: 92,   label: "Réflexes d'athlète" },
+    { min: 90,  ms: 175, pct: 96,   label: 'Niveau semi-professionnel' },
+    { min: 110, ms: 155, pct: 98,   label: 'Niveau professionnel (e-sport)' },
+    { min: 135, ms: 140, pct: 99,   label: 'Niveau pilote de course' },
+    { min: 165, ms: 125, pct: 99.5, label: 'Élite mondiale' },
+    { min: 200, ms: 110, pct: 99.9, label: 'Hors norme humaine' }
+  ];
+  function getRank(s) {
+    let r = RANKS[0];
+    for (const ri of RANKS) if (s >= ri.min) r = ri;
+    return r;
+  }
+  function getBiome(s) {
+    if (gameMode === 'classic') return BIOMES[0];
+    let b = BIOMES[0];
+    for (const bi of BIOMES) if (s >= bi.minScore) b = bi;
+    return b;
+  }
+  let currentBiomeId = BIOMES[0].id;
+  let shockwaves = [];
+  let ambientParticles = [];
+  function seedAmbient(biome) {
+    ambientParticles = [];
+    const count = 22;
+    for (let i = 0; i < count; i++) {
+      ambientParticles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: 1 + Math.random() * 2.2,
+        speed: 0.2 + Math.random() * 0.6,
+        drift: (Math.random() - 0.5) * 0.4,
+        phase: Math.random() * Math.PI * 2,
+        alpha: 0.3 + Math.random() * 0.5
+      });
+    }
+  }
+  function updateAmbient(dt, biome) {
+    ambientParticles.forEach(p => {
+      p.phase += dt * 0.002;
+      if (biome.ambientKind === 'snow') { p.y += p.speed; p.x += Math.sin(p.phase) * 0.3; }
+      else if (biome.ambientKind === 'ember') { p.y -= p.speed; p.x += Math.sin(p.phase) * 0.4; }
+      else if (biome.ambientKind === 'dust') { p.x += p.speed; p.y += Math.sin(p.phase) * 0.2; }
+      else if (biome.ambientKind === 'star') { /* twinkle only */ }
+      else { p.x += p.drift; p.y += Math.sin(p.phase) * 0.3; }
+      if (p.y > H + 4) p.y = -4;
+      if (p.y < -4) p.y = H + 4;
+      if (p.x > W + 4) p.x = -4;
+      if (p.x < -4) p.x = W + 4;
+    });
+  }
+  function drawAmbient(biome) {
+    ambientParticles.forEach(p => {
+      const tw = biome.ambientKind === 'star' ? (0.4 + Math.sin(p.phase) * 0.4) : 1;
+      ctx.globalAlpha = p.alpha * tw;
+      ctx.fillStyle = biome.ambient;
+      ctx.shadowColor = biome.ambient;
+      ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  }
+  function checkBiomeTransition(s) {
+    const b = getBiome(s);
+    if (b.id !== currentBiomeId) {
+      const leaving = currentBiomeId;
+      currentBiomeId = b.id;
+      seedAmbient(b);
+      if (leaving === 'espace') resetControlOrder();
+      if (leaving === 'glacier') clearTimeout(pendingShapeTimer);
+      const firstTime = !biomeExplained.has(b.id);
+      biomeExplained.add(b.id);
+      showBigBanner(BIOME_ICON[b.id], b.name.toUpperCase(), BIOME_MECHANIC[b.id] || 'Nouveau biome', b.ambient, firstTime ? BIOME_DETAIL[b.id] : null);
+      if (firstTime) readSlowT = 3600;
+      shockwaves.push({ r: 10, alpha: 0.9, color: b.ambient });
+      triggerShake(4, 260);
+      sfxMission();
+    }
+    biomeTagEl.textContent = BIOME_ICON[b.id] + ' ' + b.name;
+  }
+
+  let player, walls, pickups, particles, score, best, combo, bestCombo, coinsThisRun;
+  let running, gameStarted, everPlayed, speedMult, spawnTimer, timeSinceStart;
+  let slowMoT, screenShakeT, screenShakeMag, shieldCount, magnetT, multT;
+  let sandActive, sandActiveT, sandTimer;
+  let shuffleTimer;
+  let readSlowT;
+  everPlayed = false;
+  best = 0;
+
+  function initState() {
+    player = { shape: 'circle', x: W / 2, y: H - 130, size: 22, trail: [] };
+    walls = []; pickups = []; particles = [];
+    score = 0; combo = 1; bestCombo = 1; coinsThisRun = 0; shieldCount = 0;
+    speedMult = 1.0; spawnTimer = 0; timeSinceStart = 0; running = false;
+    slowMoT = 0; screenShakeT = 0; screenShakeMag = 0; magnetT = 0; multT = 0;
+    sandActive = false; sandActiveT = 0; sandTimer = 0;
+    shuffleTimer = 0;
+    readSlowT = 0;
+    currentBiomeId = BIOMES[0].id;
+    diamondUnlocked = false;
+    diamondGraceT = 0;
+    diamondGraceNotified = true;
+    btnDiamond.classList.add('hidden');
+    btnDiamond.classList.remove('incoming');
+    shockwaves = [];
+    seedAmbient(BIOMES[0]);
+    pickMission();
+  }
+  initState();
+
+  let pendingShapeTimer = null;
+  const controlsEl = document.getElementById('controls');
+  function shuffleControlButtons() {
+    const btns = Array.from(controlsEl.children);
+    for (let i = btns.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [btns[i], btns[j]] = [btns[j], btns[i]];
+    }
+    btns.forEach(b => controlsEl.appendChild(b));
+    triggerShake(3, 160);
+  }
+  function resetControlOrder() {
+    [btnCircle, btnSquare, btnTriangle, btnDiamond].forEach(b => controlsEl.appendChild(b));
+  }
+  function setShape(shape) {
+    if (!gameStarted || !running) return;
+    [btnCircle, btnSquare, btnTriangle, btnDiamond].forEach(b => { b.classList.remove('active-circle','active-square','active-triangle','active-diamond'); b.style.borderColor = ''; b.style.opacity = ''; });
+    const activeBtn = document.getElementById('btn' + shape.charAt(0).toUpperCase() + shape.slice(1));
+    activeBtn.classList.add('active-' + shape);
+    activeBtn.style.borderColor = skinColor(shape);
+
+    clearTimeout(pendingShapeTimer);
+    if (currentBiomeId === 'glacier') {
+      // Sol glissant : la forme ne s'applique qu'après un court délai
+      activeBtn.style.opacity = '0.5';
+      pendingShapeTimer = setTimeout(() => { player.shape = shape; activeBtn.style.opacity = '1'; }, 200);
+    } else {
+      player.shape = shape;
+    }
+  }
+
+  btnCircle.addEventListener('touchstart', e => { e.preventDefault(); setShape('circle'); });
+  btnSquare.addEventListener('touchstart', e => { e.preventDefault(); setShape('square'); });
+  btnTriangle.addEventListener('touchstart', e => { e.preventDefault(); setShape('triangle'); });
+  btnDiamond.addEventListener('touchstart', e => { e.preventDefault(); setShape('diamond'); });
+  btnCircle.addEventListener('mousedown', () => setShape('circle'));
+  btnSquare.addEventListener('mousedown', () => setShape('square'));
+  btnTriangle.addEventListener('mousedown', () => setShape('triangle'));
+  btnDiamond.addEventListener('mousedown', () => setShape('diamond'));
+
+  let touchStartX = null;
+  canvas.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  canvas.addEventListener('touchend', e => {
+    if (touchStartX === null || !gameStarted || !running) return;
+    const dx = (e.changedTouches[0].clientX - touchStartX);
+    const shapes = activeShapes();
+    const idx = shapes.indexOf(player.shape);
+    if (Math.abs(dx) < 20) setShape(shapes[(idx + 1) % shapes.length]);
+    else if (dx > 0) setShape(shapes[(idx + 1) % shapes.length]);
+    else setShape(shapes[(idx + shapes.length - 1) % shapes.length]);
+    touchStartX = null;
+  });
+
+  function spawnWall() {
+    const shapes = wallShapes();
+    const gapShape = shapes[Math.floor(Math.random() * shapes.length)];
+    walls.push({ y: -40, gapShape, passed: false, h: 34 });
+
+    // --- Mécanique Volcan : portes jumelles rapprochées ---
+    if (currentBiomeId === 'volcan' && Math.random() < 0.35) {
+      let twinShape = shapes[Math.floor(Math.random() * shapes.length)];
+      if (shapes.length > 1 && twinShape === gapShape) {
+        twinShape = shapes[(shapes.indexOf(twinShape) + 1) % shapes.length];
+      }
+      walls.push({ y: -130, gapShape: twinShape, passed: false, h: 34 });
+    }
+
+    const roll = Math.random();
+    // Sur Glacier, le sol glissant est plus dur : on augmente nettement la chance de ralentisseur
+    const slowBoost = currentBiomeId === 'glacier' ? 0.20 : 0;
+    if (roll < 0.07 && shieldCount < 1) pickups.push({ y: -110, type: 'shield', size: 14, taken: false });
+    else if (roll < 0.14 + slowBoost) pickups.push({ y: -110, type: 'slow', size: 14, taken: false });
+    else if (roll < 0.21 + slowBoost) pickups.push({ y: -110, type: 'magnet', size: 14, taken: false });
+    else if (roll < 0.28 + slowBoost) pickups.push({ y: -110, type: 'mult', size: 14, taken: false });
+    else if (roll < 0.62 + slowBoost) pickups.push({ y: -110, type: 'coin', size: 10, taken: false });
+  }
+
+  function spawnParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 1.5 + Math.random() * 2.5;
+      particles.push({ x, y, color, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, life: 400 + Math.random() * 200, maxLife: 600, size: 2 + Math.random() * 2.5 });
+    }
+  }
+  function triggerShake(mag, dur) { screenShakeMag = mag; screenShakeT = dur; }
+
+  function updateHudExtras() {
+    coinTagEl.textContent = '🪙 ' + coinsThisRun;
+    let extra = [];
+    if (shieldCount > 0) extra.push('🛡');
+    if (magnetT > 0) extra.push('🧲');
+    if (multT > 0) extra.push('x2');
+    shieldTagEl.textContent = extra.join(' ');
+    shieldTagEl.classList.toggle('show', extra.length > 0);
+    comboWrap.classList.toggle('show', combo > 1);
+    if (combo > 1) comboWrap.textContent = 'Combo x' + combo;
+  }
+
+  function update(dt) {
+    if (readSlowT > 0) readSlowT -= dt;
+    const slowFactor = (slowMoT > 0 ? 0.45 : 1) * (readSlowT > 0 ? 0.2 : 1);
+    if (slowMoT > 0) slowMoT -= dt;
+    if (screenShakeT > 0) screenShakeT -= dt;
+    rainbowHue = (rainbowHue + dt * 0.08) % 360;
+    checkBiomeTransition(score);
+    updateAmbient(dt, getBiome(score));
+
+    // --- Mécanique Désert : tempête de sable (masque la forme des portes) ---
+    if (currentBiomeId === 'desert') {
+      sandTimer += dt * slowFactor;
+      if (!sandActive && sandTimer > 4200) {
+        sandActive = true; sandActiveT = 1500; sandTimer = 0;
+        showPopup('🌪 Tempête de sable !');
+      }
+      if (sandActive) { sandActiveT -= dt; if (sandActiveT <= 0) sandActive = false; }
+    } else if (sandActive) { sandActive = false; }
+
+    // --- Mécanique Espace : apesanteur, les boutons se mélangent ---
+    if (currentBiomeId === 'espace') {
+      shuffleTimer += dt * slowFactor;
+      if (shuffleTimer > 3800) { shuffleTimer = 0; shuffleControlButtons(); }
+    }
+    for (let i = shockwaves.length - 1; i >= 0; i--) {
+      const sw = shockwaves[i];
+      sw.r += dt * 0.9;
+      sw.alpha -= dt * 0.0016;
+      if (sw.alpha <= 0) shockwaves.splice(i, 1);
+    }
+    if (!diamondUnlocked && score >= DIAMOND_UNLOCK_SCORE) {
+      diamondUnlocked = true;
+      diamondGraceT = DIAMOND_WARNING_MS;
+      diamondGraceNotified = false;
+      btnDiamond.classList.remove('hidden');
+      btnDiamond.classList.add('incoming');
+      showBigBanner('💎', 'NOUVELLE FORME EN APPROCHE', 'Losange', '#c084fc',
+        "Une 4ᵉ forme, le losange, va bientôt apparaître dans les portes. Entraîne-toi avec le nouveau bouton, elle ne sera obligatoire que dans quelques secondes !");
+      spawnParticles(player.x, player.y, '#c084fc', 24);
+      triggerShake(4, 220);
+      sfxMission();
+      readSlowT = 3600;
+    }
+    if (diamondGraceT > 0) {
+      diamondGraceT -= dt;
+      if (diamondGraceT <= 0 && !diamondGraceNotified) {
+        diamondGraceNotified = true;
+        btnDiamond.classList.remove('incoming');
+        showPopup('💎 Losange actif !');
+        sfxPower();
+      }
+    }
+
+    timeSinceStart += dt * slowFactor;
+    speedMult = 1 + timeSinceStart / 30000;
+    speedTagEl.textContent = 'Vitesse x' + speedMult.toFixed(1);
+    progressMission('time', timeSinceStart);
+
+    // near-record tension
+    if (best > 0 && score >= best - 3 && score < best) {
+      nearRecordTag.classList.add('show');
+    } else {
+      nearRecordTag.classList.remove('show');
+    }
+
+    spawnTimer += dt * slowFactor;
+    const curInterval = Math.max(680, 1500 - timeSinceStart / 22);
+    if (spawnTimer > curInterval) { spawnTimer = 0; spawnWall(); }
+
+    const baseSpeed = 3.2;
+    const speed = baseSpeed * speedMult * slowFactor * (dt / 16.67);
+
+    for (let i = walls.length - 1; i >= 0; i--) {
+      const w = walls[i];
+      w.y += speed;
+      if (!w.passed && w.y + w.h / 2 > player.y - player.size) {
+        w.passed = true;
+        if (w.gapShape === player.shape) {
+          combo += 1;
+          if (combo > bestCombo) bestCombo = combo;
+          let gain = combo >= 6 ? 3 : (combo >= 3 ? 2 : 1);
+          if (multT > 0) gain *= 2;
+          score += gain;
+          scoreEl.textContent = score;
+          scoreEl.classList.add('bump'); setTimeout(() => scoreEl.classList.remove('bump'), 120);
+          spawnParticles(player.x, player.y, skinColor(player.shape), 14);
+          sfxPass();
+          if (combo % 5 === 0) sfxCombo();
+          vibrate(15);
+          progressMission('combo', combo);
+          progressMission('passes', 1);
+          checkAchievements();
+          updateHudExtras();
+        } else {
+          if (shieldCount > 0) {
+            shieldCount -= 1; combo = 1;
+            spawnParticles(player.x, player.y, '#9b8cff', 20);
+            triggerShake(6, 200); sfxPower(); vibrate([20, 30, 20]);
+            updateHudExtras();
+          } else {
+            triggerGameOver(); return;
+          }
+        }
+      }
+      if (w.y > H + 60) walls.splice(i, 1);
+    }
+
+    if (magnetT > 0) magnetT -= dt;
+    if (multT > 0) multT -= dt;
+    updateHudExtras();
+
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      p.y += speed;
+      if (magnetT > 0 && p.type === 'coin' && !p.taken) {
+        const dyc = player.y - p.y;
+        if (Math.abs(dyc) < 140) p.y += dyc * 0.18;
+      }
+      if (!p.taken && Math.abs(p.y - player.y) < 26) {
+        p.taken = true;
+        if (p.type === 'coin') {
+          coinsThisRun += 1; totalCoins += 1;
+          spawnParticles(player.x, player.y - 10, '#ffd76b', 8); sfxCoin();
+          progressMission('coins', 1);
+          checkAchievements();
+        } else if (p.type === 'shield') {
+          shieldCount = 1;
+          spawnParticles(player.x, player.y - 10, '#9b8cff', 10); sfxPower();
+        } else if (p.type === 'slow') {
+          slowMoT = 3000;
+          spawnParticles(player.x, player.y - 10, '#57c7ff', 10); sfxPower();
+        } else if (p.type === 'magnet') {
+          magnetT = 5000;
+          spawnParticles(player.x, player.y - 10, '#ff6bd6', 10); sfxPower();
+        } else if (p.type === 'mult') {
+          multT = 6000;
+          spawnParticles(player.x, player.y - 10, '#ffe27a', 10); sfxPower();
+        }
+        updateHudExtras();
+      }
+      if (p.y > H + 60) pickups.splice(i, 1);
+    }
+
+    // trail
+    player.trail.push({ x: player.x, y: player.y, life: 260 });
+    for (let i = player.trail.length - 1; i >= 0; i--) {
+      player.trail[i].life -= dt;
+      if (player.trail[i].life <= 0) player.trail.splice(i, 1);
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const pt = particles[i];
+      pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.06; pt.life -= dt;
+      if (pt.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  let pulsePhase = 0;
+  function drawPlayerShape(shape, x, y, size, color) {
+    const pulse = 1 + Math.sin(pulsePhase) * 0.05;
+    size *= pulse;
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 3;
+    ctx.shadowColor = color; ctx.shadowBlur = 16 + Math.sin(pulsePhase) * 5;
+    if (shape === 'circle') { ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill(); }
+    else if (shape === 'square') { ctx.fillRect(x - size * 0.85, y - size * 0.85, size * 1.7, size * 1.7); }
+    else if (shape === 'triangle') {
+      ctx.beginPath(); ctx.moveTo(x, y - size); ctx.lineTo(x + size * 0.95, y + size * 0.8); ctx.lineTo(x - size * 0.95, y + size * 0.8); ctx.closePath(); ctx.fill();
+    } else if (shape === 'diamond') {
+      ctx.beginPath(); ctx.moveTo(x, y - size); ctx.lineTo(x + size, y); ctx.lineTo(x, y + size); ctx.lineTo(x - size, y); ctx.closePath(); ctx.fill();
+    }
+    if (shieldCount > 0) {
+      ctx.shadowBlur = 0; ctx.strokeStyle = '#9b8cff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, size + 8, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function drawWall(w) {
+    const gapW = 100; const centerX = W / 2;
+    const tint = getBiome(score).wallTint;
+    const grad1 = ctx.createLinearGradient(0, w.y - w.h/2, 0, w.y + w.h/2);
+    grad1.addColorStop(0, 'rgba(255,255,255,0.02)');
+    grad1.addColorStop(0.5, tint);
+    grad1.addColorStop(1, 'rgba(255,255,255,0.02)');
+    ctx.fillStyle = grad1;
+    roundRectFill(0, w.y - w.h / 2, centerX - gapW / 2, w.h, 6);
+    roundRectFill(centerX + gapW / 2, w.y - w.h / 2, W - (centerX + gapW / 2), w.h, 6);
+
+    const color = skinColor(w.gapShape);
+    // soft glow ring around the gap opening
+    const glowGrad = ctx.createRadialGradient(centerX, w.y, 4, centerX, w.y, 34);
+    glowGrad.addColorStop(0, color + '33');
+    glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath(); ctx.arc(centerX, w.y, 34, 0, Math.PI * 2); ctx.fill();
+
+    // Tempête de sable : la forme reste cachée tant que la porte est loin du joueur
+    let iconAlpha = 0.85;
+    if (sandActive) {
+      const dist = Math.abs(w.y - player.y);
+      iconAlpha = dist < 150 ? 0.85 : 0.06;
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.globalAlpha = iconAlpha;
+    ctx.shadowColor = color; ctx.shadowBlur = 8;
+    const midY = w.y, s = 16;
+    if (w.gapShape === 'circle') { ctx.beginPath(); ctx.arc(centerX, midY, s, 0, Math.PI * 2); ctx.stroke(); }
+    else if (w.gapShape === 'square') { ctx.strokeRect(centerX - s, midY - s, s * 2, s * 2); }
+    else if (w.gapShape === 'triangle') { ctx.beginPath(); ctx.moveTo(centerX, midY - s); ctx.lineTo(centerX + s, midY + s * 0.8); ctx.lineTo(centerX - s, midY + s * 0.8); ctx.closePath(); ctx.stroke(); }
+    else if (w.gapShape === 'diamond') { ctx.beginPath(); ctx.moveTo(centerX, midY - s); ctx.lineTo(centerX + s, midY); ctx.lineTo(centerX, midY + s); ctx.lineTo(centerX - s, midY); ctx.closePath(); ctx.stroke(); }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  }
+
+  function roundRectFill(x, y, w, h, r) {
+    if (w <= 0 || h <= 0) return;
+    r = Math.min(r, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawPickup(p) {
+    const centerX = W / 2;
+    ctx.save(); ctx.translate(centerX, p.y);
+    const map = { coin: ['#ffd76b','$'], shield: ['#9b8cff','🛡'], slow: ['#57c7ff','⚡'], magnet: ['#ff6bd6','🧲'], mult: ['#ffe27a','x2'] };
+    const [col, glyph] = map[p.type];
+    ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.arc(0, 0, p.size, 0, Math.PI * 2); ctx.fill();
+    ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = p.type === 'coin' ? '#8a6d00' : '#0b0e14';
+    ctx.fillText(glyph, 0, 1);
+    ctx.restore(); ctx.shadowBlur = 0;
+  }
+
+  function draw() {
+    const biome = getBiome(score);
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, biome.bg1);
+    grad.addColorStop(1, biome.bg2);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    if (screenShakeT > 0) {
+      const mag = screenShakeMag * (screenShakeT / 200);
+      ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+    for (let i = 0; i < H; i += 40) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke(); }
+    drawAmbient(biome);
+    if (slowMoT > 0 || readSlowT > 0) { ctx.fillStyle = 'rgba(87,199,255,0.05)'; ctx.fillRect(0, 0, W, H); }
+    if (sandActive) { ctx.fillStyle = 'rgba(232,192,122,0.12)'; ctx.fillRect(0, 0, W, H); }
+
+    walls.forEach(drawWall);
+    pickups.forEach(p => { if (!p.taken) drawPickup(p); });
+
+    const trailCol = skinTrailColor();
+    player.trail.forEach(t => {
+      ctx.globalAlpha = Math.max(0, t.life / 260) * 0.35;
+      ctx.fillStyle = trailCol;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 10, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    particles.forEach(pt => {
+      ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+      ctx.fillStyle = pt.color;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    drawPlayerShape(player.shape, player.x, player.y, player.size, skinColor(player.shape));
+    ctx.restore();
+  }
+
+  let lastTime = null;
+  function loop(ts) {
+    if (!running) return;
+    if (lastTime === null) lastTime = ts;
+    const dt = Math.min(40, ts - lastTime);
+    lastTime = ts;
+    update(dt);
+    draw();
+    if (running) requestAnimationFrame(loop);
+  }
+
+  function triggerGameOver() {
+    running = false;
+    flashEl.style.transition = 'none'; flashEl.style.opacity = '0.6';
+    requestAnimationFrame(() => { flashEl.style.transition = 'opacity 0.4s ease'; flashEl.style.opacity = '0'; });
+    sfxFail(); vibrate([40, 40, 60]); triggerShake(10, 300);
+    nearRecordTag.classList.remove('show');
+
+    if (score > best) best = score;
+    bestEl.textContent = 'Record: ' + best;
+
+    finalScoreEl.textContent = score;
+    const rk = getRank(score);
+    rankBadgeEl.innerHTML =
+      '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Rapport de test de réflexes</div>' +
+      '<div style="font-size:22px;font-weight:800;color:var(--accent-coin);">' + rk.ms + ' ms</div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">temps de réaction estimé</div>' +
+      '<div style="font-size:14px;font-weight:700;color:var(--text);">' + rk.label + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);">Top ' + (100 - rk.pct).toFixed(rk.pct % 1 === 0 ? 0 : 1) + '% des joueurs</div>';
+    finalComboEl.textContent = 'x' + bestCombo;
+    finalCoinsGainedEl.textContent = coinsThisRun;
+    finalBestEl.textContent = best;
+    muteBtn.style.display = 'none';
+    gameStarted = false;
+    everPlayed = true;
+    showView('over');
+  }
+
+  function startGame() {
+    ensureAudio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    initState();
+    scoreEl.textContent = '0';
+    bestEl.textContent = 'Record: ' + best;
+    speedTagEl.textContent = 'Vitesse x1.0';
+    updateHudExtras();
+    overlay.classList.add('hidden');
+    muteBtn.style.display = 'flex';
+    gameStarted = true; running = true; lastTime = null;
+    updateButtonSVGColors();
+    setShape('circle');
+    if (gameMode !== 'classic' && !biomeExplained.has('prairie')) {
+      biomeExplained.add('prairie');
+      showBigBanner(BIOME_ICON.prairie, BIOMES[0].name.toUpperCase(), BIOME_MECHANIC.prairie, BIOMES[0].ambient, BIOME_DETAIL.prairie);
+      readSlowT = 3600;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  playBtn.addEventListener('click', startGame);
+  playBtn.addEventListener('touchend', e => { e.preventDefault(); startGame(); });
+  retryBtn.addEventListener('click', startGame);
+  retryBtn.addEventListener('touchend', e => { e.preventDefault(); startGame(); });
+
+  // ---------- Contrôles clavier ----------
+  document.addEventListener('keydown', e => {
+    if (gameStarted && running) {
+      const shapes = activeShapes();
+      if (e.key === '1') { e.preventDefault(); setShape('circle'); }
+      else if (e.key === '2') { e.preventDefault(); setShape('square'); }
+      else if (e.key === '3') { e.preventDefault(); setShape('triangle'); }
+      else if (e.key === '4' && diamondUnlocked) { e.preventDefault(); setShape('diamond'); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const idx = shapes.indexOf(player.shape);
+        setShape(shapes[(idx + 1) % shapes.length]);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const idx = shapes.indexOf(player.shape);
+        setShape(shapes[(idx + shapes.length - 1) % shapes.length]);
+      }
+    } else if (!overlay.classList.contains('hidden')) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (!homeView.classList.contains('hidden')) startGame();
+        else if (!overView.classList.contains('hidden')) startGame();
+      }
+    }
+  });
+
+  setGameMode('biomes');
+  showView('home');
+  draw();
+})();
+</script>
+</body>
+</html>
